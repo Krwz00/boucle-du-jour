@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#FCF6EC">
+<meta name="apple-mobile-web-app-title" content="Boucle">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>Boucle</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500&family=Azeret+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  /* DA : crème, un grotesk serré pour les titres, mono pour les légendes, panneaux sombres très arrondis. Thème unique, assumé. */
+  :root{
+    --bg:#FCF6EC; --fg:#000000; --muted:#7A746A; --line:rgba(0,0,0,.14);
+    --panel:#2B2A24; --panel-fg:#FCF6EC; --panel-muted:rgba(252,246,236,.6); --route:#FCF6EC;
+    --sans:"Inter Tight","Helvetica Neue",Arial,sans-serif; --mono:"Azeret Mono",ui-monospace,Menlo,monospace;
+    --r:22px; --gutter:max(16px,env(safe-area-inset-left,0px));
+    color-scheme:light;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;margin:0;overscroll-behavior:none;-webkit-text-size-adjust:100%}
+  body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:14px;line-height:1.35;display:flex;flex-direction:column;
+    padding-top:env(safe-area-inset-top,0px);padding-left:var(--gutter);padding-right:max(16px,env(safe-area-inset-right,0px))}
+  .mono{font-family:var(--mono);font-size:11px;letter-spacing:.01em;text-transform:uppercase}
+  .mono .dot::before{content:"● ";font-size:9px}
+
+  /* En-tête : titre géant + ligne méta mono */
+  header{flex:none;padding-top:14px}
+  .top{display:flex;justify-content:space-between;align-items:center;font-family:var(--mono);font-size:11px;text-transform:uppercase}
+  h1{font-size:clamp(64px,21vw,96px);font-weight:500;letter-spacing:-.045em;line-height:.9;margin:4px 0 8px;text-transform:uppercase}
+  .meta{display:flex;justify-content:space-between;align-items:baseline;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:8px 0;color:var(--muted)}
+  .meta .mono{color:var(--fg)}
+  nav{display:flex;gap:22px;padding:6px 0 4px}
+  nav button{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.02em;background:none;border:0;padding:10px 0;min-height:44px;color:var(--muted);cursor:pointer}
+  nav button[aria-selected="true"]{color:var(--fg)}
+  nav button[aria-selected="true"]::before{content:"● ";font-size:8px;vertical-align:1px}
+
+  main{flex:1;min-height:0;position:relative}
+  section{position:absolute;inset:0;display:none;flex-direction:column;padding-bottom:calc(14px + env(safe-area-inset-bottom,0px))}
+  section[data-active]{display:flex}
+
+  /* Panneau sombre arrondi : la carte */
+  .panel{background:var(--panel);color:var(--panel-fg);border-radius:var(--r);overflow:hidden;display:flex;flex-direction:column;flex:1;min-height:0}
+  #map{flex:1;min-height:0;filter:grayscale(1) invert(.93) contrast(.85) brightness(.9)}
+  .leaflet-control-attribution{font-size:9px;opacity:.5;background:transparent!important;color:inherit!important}
+  .bar{flex:none;padding:14px 18px 16px;display:flex;flex-direction:column;gap:12px}
+  .figures{display:flex;gap:24px;align-items:baseline}
+  .figures b{display:block;font-size:30px;font-weight:500;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums}
+  .figures span{font-family:var(--mono);font-size:10px;text-transform:uppercase;color:var(--panel-muted)}
+  .actions{display:flex;gap:8px;flex-wrap:wrap}
+  .btn{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.02em;border:1px solid currentColor;background:none;color:inherit;border-radius:999px;padding:0 16px;min-height:44px;cursor:pointer;touch-action:manipulation}
+  .btn.primary{background:var(--bg);color:var(--fg);border-color:var(--bg)}
+  section#musique .btn.primary, section#reglages .btn.primary{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+  .btn::after{content:" →"}
+  .btn.plain::after{content:""}
+  .btn:focus-visible{outline:2px solid currentColor;outline-offset:2px}
+  .msg{font-family:var(--mono);font-size:10px;text-transform:uppercase;color:var(--muted);min-height:1.2em}
+  .panel .msg{color:var(--panel-muted)}
+
+  /* Musique */
+  .scroll{flex:1;overflow:auto;min-height:0;-webkit-overflow-scrolling:touch}
+  .chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:4px}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{flex:none;font-family:var(--mono);font-size:10px;text-transform:uppercase;border:1px solid var(--line);background:none;color:var(--muted);border-radius:999px;padding:0 12px;min-height:36px;cursor:pointer;touch-action:manipulation}
+  .chip[aria-pressed="true"]{color:var(--fg);border-color:var(--fg)}
+  .lead{font-size:22px;font-weight:500;letter-spacing:-.025em;line-height:1.1;margin:18px 0 14px;max-width:22ch;text-wrap:balance}
+  .album{display:flex;gap:14px;align-items:center;background:var(--panel);color:var(--panel-fg);border-radius:var(--r);padding:14px;margin-bottom:8px}
+  .cover{flex:none;width:72px;height:72px;border-radius:10px;background:rgba(252,246,236,.1);object-fit:cover}
+  .meta2{min-width:0;flex:1}
+  .meta2 .t{font-size:17px;font-weight:500;letter-spacing:-.02em;line-height:1.15}
+  .meta2 .a{font-size:14px;color:var(--panel-muted);margin-top:2px}
+  .meta2 .d{font-family:var(--mono);font-size:10px;text-transform:uppercase;color:var(--panel-muted);margin-top:6px}
+  .links{display:flex;gap:12px;margin-top:8px}
+  .links a{font-family:var(--mono);font-size:10px;text-transform:uppercase;color:var(--panel-fg);text-decoration:none;border-bottom:1px solid var(--panel-muted);padding:6px 0;display:inline-block}
+  .links a::after{content:" ↗"}
+  .total{display:flex;justify-content:space-between;padding:12px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin:6px 0 14px;font-family:var(--mono);font-size:11px;text-transform:uppercase;color:var(--muted)}
+  .total span:last-child{color:var(--fg)}
+
+  /* Réglages */
+  .field{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--line)}
+  .field label{font-family:var(--mono);font-size:11px;text-transform:uppercase;color:var(--muted)}
+  .field input{font-family:var(--sans);font-size:16px;font-weight:500;letter-spacing:-.01em;text-align:right;border:0;background:none;color:var(--fg);width:50%;padding:0;font-variant-numeric:tabular-nums;outline:none}
+  .field.file{flex-direction:column;align-items:flex-start;gap:8px}
+  .field.file input{width:100%;text-align:left;font-size:12px;font-family:var(--mono);text-transform:none}
+  .hint{font-size:13px;color:var(--muted);line-height:1.45;max-width:46ch}
+  h2{font-family:var(--mono);font-size:10px;font-weight:500;color:var(--muted);text-transform:uppercase;margin:26px 0 2px}
+  h2::before{content:"● ";font-size:8px;vertical-align:1px}
+  ol.list{margin:0;padding:0;list-style:none}
+  ol.list li{padding:10px 0;border-bottom:1px solid var(--line);font-size:13px;color:var(--muted);display:flex;justify-content:space-between;gap:12px}
+  ol.list li span:last-child{color:var(--fg);font-family:var(--mono);font-size:10px;flex:none}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="top"><span>Boucle</span><span>© 2026</span></div>
+  <h1>Boucle</h1>
+  <div class="meta"><span class="mono"><span class="dot"></span><span id="dateLabel"></span></span><span class="mono" id="metaRight">10 000 pas · Paris 17</span></div>
+  <nav role="tablist">
+    <button role="tab" aria-selected="true" data-tab="trajet">Trajet</button>
+    <button role="tab" aria-selected="false" data-tab="musique">Musique</button>
+    <button role="tab" aria-selected="false" data-tab="reglages">Réglages</button>
+  </nav>
+</header>
+
+<main>
+  <section id="trajet" data-active>
+    <div class="panel">
+      <div id="map" role="application" aria-label="Carte du trajet"></div>
+      <div class="bar">
+        <div class="figures">
+          <div><b id="sDist">–</b><span>km</span></div>
+          <div><b id="sSteps">–</b><span>pas</span></div>
+          <div><b id="sTime">–</b><span>min</span></div>
+        </div>
+        <div class="actions">
+          <button class="btn primary" id="btnReroll">Autre boucle</button>
+          <button class="btn" id="btnGmaps">Google Maps</button>
+          <button class="btn plain" id="btnGpx">GPX</button>
+        </div>
+        <div class="msg" id="msgRoute"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="musique">
+    <div class="scroll">
+      <div class="chips" id="chips" role="group" aria-label="Ambiance"></div>
+      <div class="lead" id="lead"></div>
+      <div id="picks"></div>
+      <div class="total"><span>Durée</span><span id="total">–</span></div>
+      <div class="actions">
+        <button class="btn primary" id="btnKeep">Je l'écoute</button>
+        <button class="btn" id="btnOther">Autre</button>
+      </div>
+      <div class="msg" id="msgMusic" style="margin-top:10px"></div>
+    </div>
+  </section>
+
+  <section id="reglages">
+    <div class="scroll">
+      <div class="field"><label for="addr">Départ</label><input id="addr" value="31 avenue de Saint-Ouen, Paris"></div>
+      <div class="field"><label for="steps">Objectif (pas)</label><input id="steps" type="number" value="10000" min="1000" step="500"></div>
+      <div class="field"><label for="stride">Foulée (m)</label><input id="stride" type="number" value="0.75" min="0.5" max="1.1" step="0.01"></div>
+      <div class="field"><label for="speed">Allure (km/h)</label><input id="speed" type="number" value="4.8" min="3" max="7" step="0.1"></div>
+      <div class="actions" style="margin-top:14px"><button class="btn primary" id="btnApply">Appliquer</button></div>
+      <div class="msg" id="msgSet" style="margin-top:8px"></div>
+
+      <h2>Déjà écouté</h2>
+      <div class="hint" style="margin:6px 0 10px">La playlist MFT est prise en compte, ainsi que chaque disque validé par « Je l'écoute » : l'artiste entier sort du tirage. Pour exclure toute la bibliothèque : Mac, app Musique → Fichier → Bibliothèque → Exporter la bibliothèque… (XML), puis importer ici. Tout reste sur ce téléphone.</div>
+      <div class="field file">
+        <label for="libFile">Importer l'export XML</label>
+        <input id="libFile" type="file" accept=".xml,.csv,.txt">
+      </div>
+      <div class="msg" id="libStatus" style="margin-top:8px"></div>
+      <div class="actions" style="margin-top:10px"><button class="btn plain" id="btnLibClear">Retirer l'import</button><button class="btn plain" id="btnClear">Oublier les disques écoutés</button></div>
+
+      <h2>Rues de la boucle</h2>
+      <ol class="list" id="turns"></ol>
+      <h2>Disques écoutés</h2>
+      <ol class="list" id="hist"></ol>
+    </div>
+  </section>
+</main>
+
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const todayStr=()=>new Date().toISOString().slice(0,10);
+  function seedFor(s,v){let h=2166136261;for(const c of (s+"#"+v)){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return h>>>0}
+  function rng(seed){return function(){seed=(seed+0x6D2B79F5)|0;let t=Math.imul(seed^(seed>>>15),1|seed);t=(t+Math.imul(t^(t>>>7),61|t))^t;return((t^(t>>>14))>>>0)/4294967296}}
+  const store={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+  const settings=()=>({steps:+$("steps").value||10000,stride:+$("stride").value||0.75,speed:+$("speed").value||4.8});
+  const targetMeters=()=>settings().steps*settings().stride;
+  const targetMinutes=()=>Math.round(targetMeters()/1000/settings().speed*60);
+  const norm=s=>(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\s*[\(\[].*?[\)\]]/g,"").replace(/[^a-z0-9]+/g," ").trim();
+
+  $("dateLabel").textContent=new Date().toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"});
+  document.querySelectorAll("nav [role=tab]").forEach(b=>b.onclick=()=>{
+    document.querySelectorAll("nav [role=tab]").forEach(x=>x.setAttribute("aria-selected",x===b));
+    document.querySelectorAll("main section").forEach(s=>{ if(s.id===b.dataset.tab) s.setAttribute("data-active",""); else s.removeAttribute("data-active"); });
+    if(b.dataset.tab==="trajet" && map) setTimeout(()=>map.invalidateSize(),50);
+  });
+
+  /* ---------- Trajet ---------- */
+  const OSRM="https://router.project-osrm.org/route/v1/foot/";
+  let home=store.get("home",{lat:48.8880,lon:2.3263});
+  let map, routeLayer, markers=[], current=null, variant=0;
+  function offset(p,bearingDeg,distM){
+    const R=6371000,b=bearingDeg*Math.PI/180,la1=p.lat*Math.PI/180,lo1=p.lon*Math.PI/180,d=distM/R;
+    const la2=Math.asin(Math.sin(la1)*Math.cos(d)+Math.cos(la1)*Math.sin(d)*Math.cos(b));
+    const lo2=lo1+Math.atan2(Math.sin(b)*Math.sin(d)*Math.cos(la1),Math.cos(d)-Math.sin(la1)*Math.sin(la2));
+    return {lat:la2*180/Math.PI,lon:lo2*180/Math.PI};
+  }
+  function waypoints(r,radius){ const base=r()*360, pts=[]; for(let i=0;i<3;i++){ const ang=base+i*120+(r()-0.5)*50; pts.push(offset(home,ang,radius*(0.75+r()*0.5))); } return pts; }
+  async function osrm(pts){
+    const coords=[home,...pts,home].map(p=>p.lon+","+p.lat).join(";");
+    const res=await fetch(OSRM+coords+"?overview=full&geometries=geojson&steps=true");
+    if(!res.ok) throw new Error("itinéraire "+res.status);
+    const j=await res.json(); if(j.code!=="Ok") throw new Error(j.message||j.code);
+    return j.routes[0];
+  }
+  async function generate(v){
+    variant=v; const target=targetMeters(); $("msgRoute").textContent="Calcul…";
+    let radius=target/5.2/1.25, route=null, pts=null;
+    try{ for(let i=0;i<4;i++){ pts=waypoints(rng(seedFor(todayStr(),v)),radius); route=await osrm(pts); const ratio=target/route.distance; if(Math.abs(ratio-1)<0.04) break; radius*=Math.min(1.6,Math.max(0.6,ratio)); } }
+    catch(e){ $("msgRoute").textContent="Service d'itinéraire indisponible, réessaie dans un instant."; return; }
+    current={route,pts}; drawRoute(); $("msgRoute").textContent="";
+  }
+  function drawRoute(){
+    const {route}=current, s=settings();
+    $("sDist").textContent=(route.distance/1000).toFixed(1).replace(".",",");
+    $("sSteps").textContent=Math.round(route.distance/s.stride).toLocaleString("fr-FR");
+    $("sTime").textContent=Math.round(route.distance/1000/s.speed*60);
+    if(routeLayer) map.removeLayer(routeLayer); markers.forEach(m=>map.removeLayer(m)); markers=[];
+    const c=getComputedStyle(document.documentElement).getPropertyValue("--route").trim();
+    routeLayer=L.geoJSON(route.geometry,{style:{color:c,weight:4,opacity:1}}).addTo(map);
+    markers.push(L.circleMarker([home.lat,home.lon],{radius:6,color:c,fillColor:c,fillOpacity:1,weight:2}).addTo(map));
+    map.fitBounds(routeLayer.getBounds(),{padding:[24,24]});
+    const ol=$("turns"); ol.innerHTML="";
+    route.legs.forEach(leg=>leg.steps.forEach(st=>{ if(st.distance<40||!st.name) return; const li=document.createElement("li"); li.innerHTML=`<span>${st.name}</span><span>${Math.round(st.distance)} m</span>`; ol.appendChild(li); }));
+  }
+  async function geocode(q){ const res=await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q="+encodeURIComponent(q),{headers:{"Accept-Language":"fr"}}); const j=await res.json(); if(!j.length) throw new Error("introuvable"); return {lat:+j[0].lat,lon:+j[0].lon}; }
+  function gpx(){ const trk=current.route.geometry.coordinates.map(p=>`<trkpt lat="${p[1]}" lon="${p[0]}"></trkpt>`).join("\n"); return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Boucle" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>Boucle ${todayStr()}</name><trkseg>\n${trk}\n</trkseg></trk></gpx>`; }
+  map=L.map("map",{zoomControl:false}).setView([home.lat,home.lon],14);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"}).addTo(map);
+  $("btnReroll").onclick=()=>generate(variant+1);
+  $("btnGmaps").onclick=()=>{ if(!current) return; const pts=[home,...current.pts,home].map(p=>p.lat+","+p.lon); window.open("https://www.google.com/maps/dir/"+pts.join("/")+"/data=!4m2!4m1!3e2","_blank"); };
+  $("btnGpx").onclick=()=>{ if(!current) return; const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([gpx()],{type:"application/gpx+xml"})); a.download="boucle-"+todayStr()+".gpx"; a.click(); };
+
+  /* ---------- Musique : découverte via le catalogue Apple Music (API iTunes), hors bibliothèque ---------- */
+  const ITUNES="https://itunes.apple.com/";
+  const MOODS=[["all","Tout"],["calm","Calme"],["energy","Énergique"],["electro","Électro"],["rap","Rap"],["rock","Rock"],["pop","Pop"],["soul","Soul"],["jazz","Jazz"],["folk","Folk"],["ambient","Néo-classique"],["fr","Français"],["monde","Monde"]];
+  const TERMS={
+    calm:["ambient","neo classical","slowcore","dream pop","folk acoustique","downtempo"],
+    energy:["post punk","techno","garage rock","house","afrobeat","drum and bass"],
+    electro:["electronic","french touch","idm","techno","house","synth pop"],
+    rap:["hip hop","rap francais","boom bap","trap","uk rap","jazz rap"],
+    rock:["indie rock","post punk","shoegaze","krautrock","psychedelic rock","alternative rock"],
+    pop:["indie pop","art pop","synth pop","pop","chamber pop","dream pop"],
+    soul:["neo soul","soul","r&b","funk","motown","gospel"],
+    jazz:["jazz","spiritual jazz","hard bop","jazz fusion","nu jazz","cool jazz"],
+    folk:["folk","americana","indie folk","chanson folk","songwriter","bluegrass"],
+    ambient:["ambient","minimalism","neo classical","modern classical","piano solo","drone"],
+    fr:["chanson francaise","rap francais","french touch","variete francaise","pop francaise","electro francaise"],
+    monde:["afrobeat","bossa nova","cumbia","highlife","desert blues","ethio jazz"]
+  };
+  // "Tout" : styles voisins de la playlist MFT (jazz, classique, soul, rock classique, rap 90s, musiques du monde, chanson)
+  TERMS.all=["spiritual jazz","hard bop","ethio jazz","afro funk","highlife","cumbia","tropicalia","samba","morna","desert blues","chanson francaise","canzone italiana","deep house","krautrock","philly soul","boom bap","cool jazz","free jazz","modern classical","string quartet","piano solo","fado","rai","gnawa","nigerian psych","japanese city pop","post punk","dub","afrobeat","bossa nova"];
+  // Playlist MFT (Apple Music, 300 morceaux, lue le 26/10/2026) : artistes et albums déjà écoutés
+  const MFT=[["Miles Davis","Kind of Blue"],["Miles Davis","In a Silent Way"],["The Beatles","Abbey Road"],["Marvin Gaye","What's Going On"],["Marvin Gaye","Let's Get It On"],["Fela Kuti","Zombie"],["Fela Kuti","Expensive Shit"],["Orchestre Philharmonique de Londres","Mozart: Symphonie No. 40"],["John Coltrane","A Love Supreme"],["John Coltrane","Giant Steps"],["Pink Floyd","The Dark Side of the Moon"],["Stevie Wonder","Songs in the Key of Life"],["Stevie Wonder","Innervisions"],["Bob Marley & The Wailers","Exodus"],["Bob Marley & The Wailers","Catch a Fire"],["Berliner Philharmoniker","Beethoven: 9 Symphonies"],["Berliner Philharmoniker","Tchaïkovski: Casse-noisette"],["Berliner Philharmoniker","Ravel: Boléro"],["Berliner Philharmoniker","Mahler: Symphony No. 5"],["Berliner Philharmoniker","Mahler: Symphony No. 1"],["Berliner Philharmoniker","Ravel: Daphnis et Chloé"],["Thelonious Monk","Monk's Dream"],["Thelonious Monk","Brilliant Corners"],["Led Zeppelin","Led Zeppelin IV"],["Led Zeppelin","Physical Graffiti"],["Aretha Franklin","I Never Loved a Man the Way I Love You"],["Cesária Evora","Miss Perfumado"],["Nikolai Lugansky","Debussy: Suite bergamasque"],["Charles Mingus","Mingus Ah Um"],["David Bowie","The Rise and Fall of Ziggy Stardust and the Spiders from Mars"],["Prince & The Revolution","Purple Rain"],["Prince","Purple Rain"],["Buena Vista Social Club","Buena Vista Social Club"],["Buena Vista Social Club","Lost and Found"],["Herbie Hancock","Head Hunters"],["Fleetwood Mac","Rumours"],["Lauryn Hill","The Miseducation of Lauryn Hill"],["Ravi Shankar","The Sounds of India"],["Ravi Shankar","Chants of India"],["Chet Baker","Chet Baker Sings"],["Radiohead","OK Computer"],["James Brown","Live At The Apollo"],["Ali Farka Touré","In the Heart of the Moon"],["Teodor Currentzis","Stravinsky: Le Sacre du Printemps"],["Esperanza Spalding","Emily's D+Evolution"],["Nirvana","Nevermind"],["Nirvana","In Utero"],["OutKast","Aquemini"],["Manu Dibango","O Boso"],["Manu Dibango","Manu Dibango Anthology"],["Bill Evans","Village Vanguard"],["U2","The Joshua Tree"],["Public Enemy","It Takes a Nation of Millions to Hold Us Back"],["Anouar Brahem","Le pas du chat noir"],["Gidon Kremer","Arvo Pärt: Tabula Rasa"],["Staatsorchester Stuttgart","Arvo Pärt: Tabula Rasa"],["Ornette Coleman","The Shape of Jazz to Come"],["Dire Straits","Brothers In Arms"],["Kanye West","My Beautiful Dark Twisted Fantasy"],["Philip Glass","Glassworks"],["Charlie Parker","Best Of The Complete Savoy & Dial Studio Recordings"],["Oasis","(What's the Story) Morning Glory?"],["Freddie Gibbs","Piñata"],["Daniel Barenboim","Chopin: Nocturnes"],["Duke Ellington and His Orchestra","Ellington at Newport"],["Arctic Monkeys","AM"],["A Tribe Called Quest","The Low End Theory"],["Ella Fitzgerald","Ella and Louis"],["The Rolling Stones","Exile On Main Street"],["The Rolling Stones","Sticky Fingers"],["JAŸ-Z","The Blueprint"],["Curtis Mayfield","Curtis"],["Daft Punk","Homework"],["Alain Bashung","Fantaisie Militaire"],["IAM","L'école du micro d'argent"],["Pierre Boulez","Debussy: La mer"],["Black Sabbath","Paranoid"],["Larry Heard","Alien"],["Léo Ferré","Amour Anarchie"],["Lucio Battisti","Anima latina"],["The Velvet Underground","Loaded"],["Nas","Illmatic"]];
+  const MFT_LIB={artists:[...new Set(MFT.map(p=>norm(p[0])))],albums:[...new Set(MFT.map(p=>norm(p[0])+"|"+norm(p[1])))],date:"26/10/2026",source:"playlist MFT"};
+  let mood=store.get("mood","all"), mv=0, picks=[], lib=store.get("lib",null)||MFT_LIB;
+  const hist=()=>store.get("hist",[]);
+  const heard=()=>store.get("heard",{artists:[],albums:[]});
+  const inLibrary=a=>{ const ar=norm(a.artistName), al=ar+"|"+norm(a.collectionName), h=heard();
+    return (lib&&(lib.artists.includes(ar)||lib.albums.includes(al)))||h.artists.includes(ar)||h.albums.includes(al); };
+  const seen=a=>hist().some(h=>h.id===a.collectionId);
+  const okAlbum=a=>a.wrapperType==="collection"&&a.collectionType==="Album"&&a.trackCount>=7&&!/single|\bep\b|live|remaster|deluxe|best of|greatest|anthology|compilation|karaoke|tribute|soundtrack|bande originale/i.test(a.collectionName);
+
+  async function jget(url){ const r=await fetch(url); if(!r.ok) throw new Error("itunes "+r.status); return r.json(); }
+  async function candidates(r){
+    const terms=TERMS[mood].slice().sort(()=>r()-0.5).slice(0,3);
+    const out=new Map();
+    for(const t of terms){
+      const j=await jget(ITUNES+"search?media=music&entity=album&country=fr&limit=100&term="+encodeURIComponent(t));
+      j.results.forEach(a=>{ if(okAlbum(a)&&!inLibrary(a)&&!seen(a)) out.set(a.collectionId,a); });
+    }
+    return [...out.values()];
+  }
+  async function durations(albums){
+    const ids=albums.map(a=>a.collectionId).join(",");
+    const j=await jget(ITUNES+"lookup?entity=song&country=fr&id="+ids);
+    const sum={}; j.results.forEach(t=>{ if(t.wrapperType==="track") sum[t.collectionId]=(sum[t.collectionId]||0)+(t.trackTimeMillis||0); });
+    albums.forEach(a=>a.min=Math.round((sum[a.collectionId]||0)/60000));
+    return albums.filter(a=>a.min>=25);
+  }
+  async function pickMusic(v){
+    mv=v; const target=targetMinutes(), r=rng(seedFor(todayStr()+mood,v));
+    $("msgMusic").textContent="Recherche dans le catalogue…"; $("picks").innerHTML="";
+    try{
+      let pool=(await candidates(r)).sort(()=>r()-0.5);
+      if(pool.length<4) throw new Error("trop peu de disques inconnus pour cette ambiance");
+      const withDur=await durations(pool.slice(0,25));
+      let best=null,bestGap=1e9;
+      outer: for(const tol of [8,14,22]) for(let i=0;i<withDur.length;i++){
+        const a=withDur[i]; if(Math.abs(a.min-target)<=tol){best=[a];break outer}
+        for(let j=i+1;j<withDur.length;j++){ const b=withDur[j],s=a.min+b.min,g=Math.abs(s-target);
+          if(g<=tol){best=[a,b];break outer} if(g<bestGap){bestGap=g;best=[a,b]}
+          if(s<target-tol) for(let k=j+1;k<withDur.length;k++){ const c=withDur[k]; if(Math.abs(s+c.min-target)<=tol){best=[a,b,c];break outer} } }
+      }
+      picks=best||withDur.slice(0,2); renderMusic(); $("msgMusic").textContent="";
+    }catch(e){ $("msgMusic").textContent="Catalogue inaccessible ("+e.message+")."; }
+  }
+  function renderMusic(){
+    const t=targetMinutes(), total=picks.reduce((x,a)=>x+a.min,0), d=total-t;
+    $("lead").textContent=t+" minutes de marche, "+(picks.length===1?"un disque":picks.length===2?"deux disques":"trois disques")+" que tu n'as jamais écoutés.";
+    $("picks").innerHTML=picks.map(a=>{ const q=encodeURIComponent(a.artistName+" "+a.collectionName); const art=(a.artworkUrl100||"").replace("100x100","300x300");
+      return `<article class="album"><img class="cover" src="${art}" alt="" loading="lazy"><div class="meta">
+      <div class="t">${a.collectionName}</div><div class="a">${a.artistName}</div><div class="d">${(a.releaseDate||"").slice(0,4)} · ${a.min} min · ${a.primaryGenreName||""}</div>
+      <div class="links"><a href="${a.collectionViewUrl}" target="_blank" rel="noopener">Apple Music</a><a href="https://open.spotify.com/search/${q}/albums" target="_blank" rel="noopener">Spotify</a></div></div></article>`; }).join("");
+    $("total").textContent=total+" min ("+(d>=0?"+":"")+d+")";
+    $("hist").innerHTML=hist().slice().reverse().slice(0,30).map(x=>`<li><span>${x.artist}, ${x.title}</span><span>${new Date(x.t).toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit"})}</span></li>`).join("")||"<li><span>Aucun pour l'instant</span></li>";
+  }
+  MOODS.forEach(([k,label])=>{ const b=document.createElement("button"); b.className="chip"; b.type="button"; b.textContent=label; b.dataset.k=k; b.setAttribute("aria-pressed",k===mood);
+    b.onclick=()=>{ mood=k; store.set("mood",mood); document.querySelectorAll(".chip").forEach(c=>c.setAttribute("aria-pressed",c.dataset.k===mood)); pickMusic(0); }; $("chips").appendChild(b); });
+  $("btnKeep").onclick=()=>{ const h=hist(), hd=heard(), now=Date.now();
+    picks.forEach(a=>{ if(!h.some(x=>x.id===a.collectionId)) h.push({id:a.collectionId,artist:a.artistName,title:a.collectionName,t:now});
+      const ar=norm(a.artistName), al=ar+"|"+norm(a.collectionName); if(!hd.artists.includes(ar)) hd.artists.push(ar); if(!hd.albums.includes(al)) hd.albums.push(al); });
+    store.set("hist",h.slice(-500)); store.set("heard",hd); libStatus(); renderMusic();
+    $("msgMusic").textContent="Noté : "+picks.map(a=>a.artistName).join(", ")+" ne reviendront plus, aucun album."; };
+  $("btnOther").onclick=()=>pickMusic(mv+1);
+
+  /* ---------- Bibliothèque : import de l'export XML (ou CSV artiste;album) ---------- */
+  function libStatus(){ const hd=heard(); $("libStatus").textContent=`${lib.artists.length} artistes (${lib.source}, ${lib.date}) + ${hd.artists.length} artistes écoutés depuis l'app : exclus.`; }
+  function parseXml(txt){
+    const doc=new DOMParser().parseFromString(txt,"application/xml"); const artists=new Set(), albums=new Set();
+    doc.querySelectorAll("dict > dict > dict").forEach(d=>{ let art="",alb="",aa=""; const ks=d.children;
+      for(let i=0;i<ks.length;i+=2){ const k=ks[i].textContent, v=ks[i+1]?ks[i+1].textContent:""; if(k==="Artist")art=v; else if(k==="Album")alb=v; else if(k==="Album Artist")aa=v; }
+      const a=norm(aa||art); if(a){artists.add(a); if(alb) albums.add(a+"|"+norm(alb));} if(art&&norm(art)!==a) artists.add(norm(art)); });
+    return {artists:[...artists],albums:[...albums]};
+  }
+  function parseCsv(txt){ const artists=new Set(), albums=new Set(); txt.split(/\r?\n/).forEach(l=>{ const p=l.split(/[;,\t]/).map(s=>s.replace(/^"|"$/g,"").trim()); if(!p[0]||/^artist/i.test(p[0])) return; const a=norm(p[0]); artists.add(a); if(p[1]) albums.add(a+"|"+norm(p[1])); }); return {artists:[...artists],albums:[...albums]}; }
+  $("libFile").onchange=async e=>{ const f=e.target.files[0]; if(!f) return; $("libStatus").textContent="Lecture…";
+    try{ const txt=await f.text(); const parsed=/^\s*<\?xml|<plist/i.test(txt.slice(0,200))?parseXml(txt):parseCsv(txt);
+      if(!parsed.artists.length) throw new Error("rien trouvé");
+      lib={artists:[...new Set([...MFT_LIB.artists,...parsed.artists])],albums:[...new Set([...MFT_LIB.albums,...parsed.albums])],date:new Date().toLocaleDateString("fr-FR"),source:"playlist MFT + import"}; store.set("lib",lib); libStatus(); pickMusic(0); }
+    catch(err){ $("libStatus").textContent="Fichier illisible : "+err.message; } };
+  $("btnLibClear").onclick=()=>{ lib=MFT_LIB; store.set("lib",null); libStatus(); pickMusic(0); };
+  $("btnClear").onclick=()=>{ store.set("hist",[]); store.set("heard",{artists:[],albums:[]}); libStatus(); pickMusic(0); $("msgSet").textContent="Historique effacé."; };
+
+  /* ---------- Réglages ---------- */
+  const saved=store.get("settings",null); if(saved){$("steps").value=saved.steps;$("stride").value=saved.stride;$("speed").value=saved.speed;if(saved.addr)$("addr").value=saved.addr;}
+  $("btnApply").onclick=async()=>{ const s=settings(); s.addr=$("addr").value; store.set("settings",s);
+    try{ home=await geocode($("addr").value); store.set("home",home); $("msgSet").textContent=""; }catch(e){ $("msgSet").textContent="Adresse introuvable, départ inchangé."; }
+    generate(0); pickMusic(0); };
+
+  libStatus(); generate(0); pickMusic(0);
+})();
+</script>
+</body>
+</html>
