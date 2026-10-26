@@ -207,9 +207,9 @@
     return j.routes[0];
   }
   async function generate(v){
-    variant=v; const target=targetMeters(); $("msgRoute").textContent="Calcul…";
+    if(!map) return; variant=v; const target=targetMeters(); $("msgRoute").textContent="Calcul…";
     let radius=target/5.2/1.25, route=null, pts=null;
-    try{ for(let i=0;i<4;i++){ pts=waypoints(rng(seedFor(todayStr(),v)),radius); route=await osrm(pts); const ratio=target/route.distance; if(Math.abs(ratio-1)<0.04) break; radius*=Math.min(1.6,Math.max(0.6,ratio)); } }
+    try{ for(let i=0;i<6;i++){ pts=waypoints(rng(seedFor(todayStr(),v)),radius); route=await osrm(pts); const ratio=target/route.distance; if(Math.abs(ratio-1)<0.04) break; radius*=Math.min(1.6,Math.max(0.6,ratio)); } }
     catch(e){ $("msgRoute").textContent="Service d'itinéraire indisponible, réessaie dans un instant."; return; }
     current={route,pts}; drawRoute(); $("msgRoute").textContent="";
   }
@@ -228,93 +228,149 @@
   }
   async function geocode(q){ const res=await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q="+encodeURIComponent(q),{headers:{"Accept-Language":"fr"}}); const j=await res.json(); if(!j.length) throw new Error("introuvable"); return {lat:+j[0].lat,lon:+j[0].lon}; }
   function gpx(){ const trk=current.route.geometry.coordinates.map(p=>`<trkpt lat="${p[1]}" lon="${p[0]}"></trkpt>`).join("\n"); return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Boucle" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>Boucle ${todayStr()}</name><trkseg>\n${trk}\n</trkseg></trk></gpx>`; }
-  map=L.map("map",{zoomControl:false}).setView([home.lat,home.lon],14);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"}).addTo(map);
+  if(window.L){ map=L.map("map",{zoomControl:false}).setView([home.lat,home.lon],14);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"}).addTo(map); }
+  else $("msgRoute").textContent="Carte indisponible hors connexion.";
   $("btnReroll").onclick=()=>generate(variant+1);
   $("btnGmaps").onclick=()=>{ if(!current) return; const pts=[home,...current.pts,home].map(p=>p.lat+","+p.lon); window.open("https://www.google.com/maps/dir/"+pts.join("/")+"/data=!4m2!4m1!3e2","_blank"); };
   $("btnGpx").onclick=()=>{ if(!current) return; const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([gpx()],{type:"application/gpx+xml"})); a.download="boucle-"+todayStr()+".gpx"; a.click(); };
 
-  /* ---------- Musique : découverte via le catalogue Apple Music (API iTunes), hors bibliothèque ---------- */
-  const ITUNES="https://itunes.apple.com/";
-  const MOODS=[["all","Tout"],["calm","Calme"],["energy","Énergique"],["electro","Électro"],["rap","Rap"],["rock","Rock"],["pop","Pop"],["soul","Soul"],["jazz","Jazz"],["folk","Folk"],["ambient","Néo-classique"],["fr","Français"],["monde","Monde"]];
-  const TERMS={
-    calm:["ambient","neo classical","slowcore","dream pop","folk acoustique","downtempo"],
-    energy:["post punk","techno","garage rock","house","afrobeat","drum and bass"],
-    electro:["electronic","french touch","idm","techno","house","synth pop"],
-    rap:["hip hop","rap francais","boom bap","trap","uk rap","jazz rap"],
-    rock:["indie rock","post punk","shoegaze","krautrock","psychedelic rock","alternative rock"],
-    pop:["indie pop","art pop","synth pop","pop","chamber pop","dream pop"],
-    soul:["neo soul","soul","r&b","funk","motown","gospel"],
-    jazz:["jazz","spiritual jazz","hard bop","jazz fusion","nu jazz","cool jazz"],
-    folk:["folk","americana","indie folk","chanson folk","songwriter","bluegrass"],
-    ambient:["ambient","minimalism","neo classical","modern classical","piano solo","drone"],
-    fr:["chanson francaise","rap francais","french touch","variete francaise","pop francaise","electro francaise"],
-    monde:["afrobeat","bossa nova","cumbia","highlife","desert blues","ethio jazz"]
-  };
-  // "Tout" : styles voisins de la playlist MFT (jazz, classique, soul, rock classique, rap 90s, musiques du monde, chanson)
-  TERMS.all=["spiritual jazz","hard bop","ethio jazz","afro funk","highlife","cumbia","tropicalia","samba","morna","desert blues","chanson francaise","canzone italiana","deep house","krautrock","philly soul","boom bap","cool jazz","free jazz","modern classical","string quartet","piano solo","fado","rai","gnawa","nigerian psych","japanese city pop","post punk","dub","afrobeat","bossa nova"];
+  /* ---------- Musique : canon des grands classiques par genre, hors bibliothèque ---------- */
+  // [artiste, album, année, minutes, énergie 1 à 3, tags]
+  const CANON=[
+    // Jazz
+    ["Dave Brubeck Quartet","Time Out",1959,39,1,["jazz"]],["Sonny Rollins","Saxophone Colossus",1956,40,2,["jazz"]],["Cannonball Adderley","Somethin' Else",1958,46,1,["jazz"]],
+    ["Art Blakey & The Jazz Messengers","Moanin'",1958,38,2,["jazz"]],["Horace Silver","Song for My Father",1965,44,2,["jazz"]],["Lee Morgan","The Sidewinder",1964,43,2,["jazz"]],
+    ["Wayne Shorter","Speak No Evil",1966,42,1,["jazz"]],["Eric Dolphy","Out to Lunch!",1964,42,2,["jazz"]],["Oliver Nelson","The Blues and the Abstract Truth",1961,37,1,["jazz"]],
+    ["Stan Getz & João Gilberto","Getz/Gilberto",1964,34,1,["jazz","monde"]],["Keith Jarrett","The Köln Concert",1975,66,1,["jazz"]],["Pharoah Sanders","Karma",1969,38,2,["jazz"]],
+    ["Alice Coltrane","Journey in Satchidananda",1971,37,1,["jazz"]],["Sun Ra","Space Is the Place",1973,45,2,["jazz"]],["Weather Report","Heavy Weather",1977,38,2,["jazz"]],
+    ["Nina Simone","I Put a Spell on You",1965,34,2,["jazz","soul"]],["Billie Holiday","Lady in Satin",1958,44,1,["jazz"]],["Sarah Vaughan","Sarah Vaughan with Clifford Brown",1954,45,1,["jazz"]],
+    ["Count Basie","The Atomic Mr. Basie",1958,39,2,["jazz"]],["Dexter Gordon","Go",1962,38,2,["jazz"]],["Grant Green","Idle Moments",1965,42,1,["jazz"]],
+    ["Ahmad Jamal Trio","At the Pershing: But Not for Me",1958,33,1,["jazz"]],["Jaco Pastorius","Jaco Pastorius",1976,41,2,["jazz"]],["Kamasi Washington","Heaven and Earth",2018,145,2,["jazz"]],
+    ["Robert Glasper Experiment","Black Radio",2012,66,2,["jazz","soul"]],["Shabaka and the Ancestors","We Are Sent Here by History",2020,64,2,["jazz"]],["Mulatu Astatke","Éthiopiques 4",1998,65,2,["jazz","monde"]],
+    // Soul, funk, R&B
+    ["Sly & The Family Stone","There's a Riot Goin' On",1971,48,2,["soul"]],["Isaac Hayes","Hot Buttered Soul",1969,45,2,["soul"]],["Al Green","Call Me",1973,33,1,["soul"]],
+    ["Otis Redding","Otis Blue",1965,33,2,["soul"]],["Bill Withers","Still Bill",1972,35,2,["soul"]],["Donny Hathaway","Live",1972,45,2,["soul"]],
+    ["Parliament","Mothership Connection",1975,38,3,["soul"]],["Funkadelic","Maggot Brain",1971,37,2,["soul","rock"]],["Earth, Wind & Fire","That's the Way of the World",1975,38,2,["soul"]],
+    ["Michael Jackson","Off the Wall",1979,42,3,["soul","pop"]],["D'Angelo","Voodoo",2000,79,2,["soul"]],["Erykah Badu","Baduizm",1997,57,1,["soul"]],
+    ["Maxwell","Urban Hang Suite",1996,58,1,["soul"]],["Frank Ocean","Blonde",2016,60,1,["soul"]],["Solange","A Seat at the Table",2016,52,1,["soul"]],
+    ["Amy Winehouse","Back to Black",2006,35,2,["soul"]],["Sade","Diamond Life",1984,44,1,["soul","pop"]],["Anderson .Paak","Malibu",2016,61,3,["soul","rap"]],
+    ["The Isley Brothers","3 + 3",1973,39,2,["soul"]],["Gil Scott-Heron","Pieces of a Man",1971,43,2,["soul","jazz"]],["Roy Ayers Ubiquity","Everybody Loves the Sunshine",1976,36,1,["soul","jazz"]],
+    // Rap
+    ["Wu-Tang Clan","Enter the Wu-Tang (36 Chambers)",1993,62,3,["rap"]],["Dr. Dre","The Chronic",1992,63,3,["rap"]],["The Notorious B.I.G.","Ready to Die",1994,69,3,["rap"]],
+    ["Mobb Deep","The Infamous",1995,66,2,["rap"]],["GZA","Liquid Swords",1995,58,2,["rap"]],["Raekwon","Only Built 4 Cuban Linx…",1995,70,2,["rap"]],
+    ["Madvillain","Madvillainy",2004,46,2,["rap"]],["Kendrick Lamar","good kid, m.A.A.d city",2012,68,3,["rap"]],["Kendrick Lamar","To Pimp a Butterfly",2015,79,2,["rap","jazz"]],
+    ["De La Soul","3 Feet High and Rising",1989,67,2,["rap"]],["Eric B. & Rakim","Paid in Full",1987,46,2,["rap"]],["The Roots","Things Fall Apart",1999,71,2,["rap"]],
+    ["Common","Be",2005,42,2,["rap"]],["J Dilla","Donuts",2006,44,2,["rap"]],["Tyler, the Creator","Igor",2019,40,2,["rap","soul"]],
+    ["Lauryn Hill","The Miseducation of Lauryn Hill",1998,77,2,["rap","soul"]],["Little Simz","Sometimes I Might Be Introvert",2021,65,2,["rap"]],["Missy Elliott","Supa Dupa Fly",1997,65,3,["rap"]],
+    ["MC Solaar","Prose combat",1994,62,2,["rap","fr"]],["NTM","Paris sous les bombes",1995,64,3,["rap","fr"]],["Oxmo Puccino","Opéra Puccino",1998,70,2,["rap","fr"]],
+    ["Lunatic","Mauvais œil",2000,72,2,["rap","fr"]],["Booba","Temps mort",2002,65,3,["rap","fr"]],["Nekfeu","Feu",2015,56,2,["rap","fr"]],["PNL","Dans la légende",2016,61,2,["rap","fr"]],
+    // Rock
+    ["The Who","Who's Next",1971,43,3,["rock"]],["The Doors","The Doors",1967,44,2,["rock"]],["Jimi Hendrix","Electric Ladyland",1968,74,3,["rock"]],
+    ["The Beach Boys","Pet Sounds",1966,36,1,["rock","pop"]],["The Kinks","The Village Green Preservation Society",1968,39,2,["rock"]],["Cream","Disraeli Gears",1967,33,3,["rock"]],
+    ["Television","Marquee Moon",1977,46,2,["rock"]],["Patti Smith","Horses",1975,43,2,["rock"]],["Ramones","Ramones",1976,29,3,["rock"]],
+    ["The Clash","London Calling",1979,65,3,["rock"]],["Joy Division","Unknown Pleasures",1979,39,2,["rock"]],["Talking Heads","Remain in Light",1980,40,3,["rock"]],
+    ["The Smiths","The Queen Is Dead",1986,37,2,["rock"]],["The Cure","Disintegration",1989,72,2,["rock"]],["Pixies","Doolittle",1989,39,3,["rock"]],
+    ["Sonic Youth","Daydream Nation",1988,71,3,["rock"]],["My Bloody Valentine","Loveless",1991,49,2,["rock"]],["Pavement","Crooked Rain, Crooked Rain",1994,41,2,["rock"]],
+    ["Neutral Milk Hotel","In the Aeroplane Over the Sea",1998,40,2,["rock","folk"]],["Wilco","Yankee Hotel Foxtrot",2002,52,2,["rock"]],["The Strokes","Is This It",2001,36,3,["rock"]],
+    ["Interpol","Turn On the Bright Lights",2002,49,2,["rock"]],["Arcade Fire","Funeral",2004,48,3,["rock"]],["LCD Soundsystem","Sound of Silver",2007,56,3,["rock","electro"]],
+    ["Tame Impala","Currents",2015,51,2,["rock","pop"]],["Queens of the Stone Age","Songs for the Deaf",2002,61,3,["rock"]],["Rage Against the Machine","Rage Against the Machine",1992,53,3,["rock"]],
+    ["Pearl Jam","Ten",1991,53,3,["rock"]],["Red Hot Chili Peppers","Blood Sugar Sex Magik",1991,74,3,["rock"]],["Portishead","Dummy",1994,49,1,["rock","electro"]],
+    ["Can","Tago Mago",1971,73,2,["rock"]],["Neu!","Neu!",1972,43,2,["rock"]],["King Crimson","In the Court of the Crimson King",1969,44,2,["rock"]],
+    ["Bruce Springsteen","Born to Run",1975,39,3,["rock"]],["Lou Reed","Transformer",1972,37,2,["rock"]],["Iggy Pop","Lust for Life",1977,41,3,["rock"]],
+    ["Fontaines D.C.","Romance",2024,44,3,["rock"]],["Idles","Joy as an Act of Resistance",2018,42,3,["rock"]],["The War on Drugs","Lost in the Dream",2014,60,2,["rock"]],
+    // Pop
+    ["Kate Bush","Hounds of Love",1985,48,2,["pop"]],["Björk","Homogenic",1997,44,2,["pop","electro"]],["Madonna","Like a Prayer",1989,51,3,["pop"]],
+    ["ABBA","Arrival",1976,34,2,["pop"]],["Pet Shop Boys","Actually",1987,48,2,["pop","electro"]],["Lorde","Melodrama",2017,41,2,["pop"]],
+    ["Robyn","Body Talk",2010,54,3,["pop","electro"]],["Dua Lipa","Future Nostalgia",2020,37,3,["pop"]],["Rosalía","Motomami",2022,42,3,["pop"]],
+    ["Billie Eilish","Happier Than Ever",2021,56,1,["pop"]],["The Weeknd","After Hours",2020,56,2,["pop"]],["Beyoncé","Renaissance",2022,62,3,["pop","soul"]],
+    ["Charli XCX","Brat",2024,41,3,["pop","electro"]],["Vampire Weekend","Modern Vampires of the City",2013,43,2,["pop","rock"]],["The xx","xx",2009,38,1,["pop"]],
+    ["Christine and the Queens","Chaleur humaine",2014,44,2,["pop","fr"]],["Stromae","Racine carrée",2013,48,3,["pop","fr"]],["Phoenix","Wolfgang Amadeus Phoenix",2009,37,3,["pop","fr"]],
+    // Électro
+    ["Kraftwerk","Trans-Europe Express",1977,43,2,["electro"]],["Kraftwerk","The Man-Machine",1978,36,2,["electro"]],["Massive Attack","Mezzanine",1998,63,2,["electro"]],
+    ["Aphex Twin","Selected Ambient Works 85-92",1992,74,1,["electro","ambient"]],["Boards of Canada","Music Has the Right to Children",1998,63,1,["electro","ambient"]],["Burial","Untrue",2007,50,1,["electro"]],
+    ["The Chemical Brothers","Dig Your Own Hole",1997,62,3,["electro"]],["The Prodigy","The Fat of the Land",1997,56,3,["electro"]],["Underworld","Dubnobasswithmyheadman",1994,73,3,["electro"]],
+    ["Justice","Cross",2007,48,3,["electro","fr"]],["Air","Moon Safari",1998,44,1,["electro","fr"]],["Cassius","1999",1999,60,3,["electro","fr"]],
+    ["Laurent Garnier","Unreasonable Behaviour",2000,70,2,["electro","fr"]],["Jon Hopkins","Immunity",2013,60,2,["electro"]],["Four Tet","There Is Love in You",2010,46,2,["electro"]],
+    ["Caribou","Our Love",2014,42,2,["electro"]],["Jamie xx","In Colour",2015,43,2,["electro"]],["Disclosure","Settle",2013,61,3,["electro"]],
+    ["Moderat","II",2013,55,2,["electro"]],["Bonobo","Black Sands",2010,57,1,["electro"]],["Röyksopp","Melody A.M.",2001,48,2,["electro"]],
+    ["Moby","Play",1999,63,2,["electro"]],["Fatboy Slim","You've Come a Long Way, Baby",1998,61,3,["electro"]],["Orbital","Orbital 2",1993,65,2,["electro"]],
+    ["Autechre","Tri Repetae",1995,67,2,["electro"]],["Floating Points","Crush",2019,41,2,["electro"]],["Bicep","Bicep",2017,56,2,["electro"]],["M83","Hurry Up, We're Dreaming",2011,74,3,["electro","fr"]],
+    // Folk, songwriters
+    ["Nick Drake","Pink Moon",1972,28,1,["folk"]],["Nick Drake","Five Leaves Left",1969,41,1,["folk"]],["Joni Mitchell","Blue",1971,36,1,["folk"]],
+    ["Bob Dylan","Blood on the Tracks",1975,52,2,["folk"]],["Bob Dylan","Highway 61 Revisited",1965,51,2,["folk","rock"]],["Leonard Cohen","Songs of Leonard Cohen",1967,41,1,["folk"]],
+    ["Neil Young","Harvest",1972,37,2,["folk","rock"]],["Simon & Garfunkel","Bridge over Troubled Water",1970,37,2,["folk"]],["Van Morrison","Astral Weeks",1968,47,1,["folk"]],
+    ["Tom Waits","Rain Dogs",1985,54,2,["folk","rock"]],["Elliott Smith","Either/Or",1997,37,1,["folk"]],["Jeff Buckley","Grace",1994,52,2,["folk","rock"]],
+    ["Fleet Foxes","Fleet Foxes",2008,39,1,["folk"]],["Bon Iver","For Emma, Forever Ago",2007,37,1,["folk"]],["Sufjan Stevens","Carrie & Lowell",2015,44,1,["folk"]],
+    ["Johnny Cash","At Folsom Prison",1968,48,2,["folk"]],["Beck","Sea Change",2002,52,1,["folk","rock"]],["Big Thief","U.F.O.F.",2019,44,1,["folk"]],
+    // Classique, néo-classique, ambient
+    ["Glenn Gould","Bach : Variations Goldberg (1981)",1981,51,1,["ambient"]],["Martha Argerich","Chopin : Préludes op. 28",1977,38,1,["ambient"]],["Maurizio Pollini","Beethoven : Dernières sonates op. 109 à 111",1977,62,1,["ambient"]],
+    ["Carlos Kleiber & Wiener Philharmoniker","Beethoven : Symphonies 5 et 7",1976,72,2,["ambient"]],["Jacqueline du Pré","Elgar : Concerto pour violoncelle",1965,60,1,["ambient"]],["Pablo Casals","Bach : Suites pour violoncelle",1939,135,1,["ambient"]],
+    ["Hilary Hahn","Bach : Sonates et partitas",1997,66,1,["ambient"]],["Steve Reich","Music for 18 Musicians",1978,58,2,["ambient"]],["Max Richter","The Blue Notebooks",2004,54,1,["ambient"]],
+    ["Ólafur Arnalds","re:member",2018,46,1,["ambient"]],["Nils Frahm","All Melody",2018,74,1,["ambient"]],["Brian Eno","Ambient 1: Music for Airports",1978,48,1,["ambient"]],
+    ["Brian Eno","Another Green World",1975,41,1,["ambient","rock"]],["Erik Satie par Aldo Ciccolini","Gymnopédies, Gnossiennes",1986,60,1,["ambient"]],["Górecki par Dawn Upshaw","Symphonie no 3",1992,54,1,["ambient"]],
+    ["Hildur Guðnadóttir","Without Sinking",2009,48,1,["ambient"]],["Jóhann Jóhannsson","Orphée",2016,46,1,["ambient"]],["William Basinski","The Disintegration Loops I",2002,63,1,["ambient"]],
+    // Monde
+    ["Tinariwen","Amassakoul",2004,52,2,["monde"]],["Amadou & Mariam","Dimanche à Bamako",2004,56,2,["monde","fr"]],["Toumani Diabaté","The Mandé Variations",2008,56,1,["monde"]],
+    ["Oumou Sangaré","Moussolou",1989,41,2,["monde"]],["Salif Keita","Soro",1987,40,2,["monde"]],["Youssou N'Dour","Egypt",2004,46,1,["monde"]],
+    ["Ebo Taylor","Life Stories",2011,76,2,["monde"]],["Orchestra Baobab","Pirates Choice",1989,61,2,["monde"]],["Khruangbin","Con Todo El Mundo",2018,40,1,["monde","rock"]],
+    ["Caetano Veloso","Transa",1972,35,2,["monde"]],["Gilberto Gil","Refazenda",1975,37,1,["monde"]],["Jorge Ben","África Brasil",1976,37,3,["monde"]],
+    ["Os Mutantes","Os Mutantes",1968,36,2,["monde","rock"]],["Rubén Blades & Willie Colón","Siembra",1978,41,2,["monde"]],["Celia Cruz","Son con guaguancó",1966,33,2,["monde"]],
+    ["Umm Kulthum","Enta Omri",1964,58,1,["monde"]],["Fairuz","Kifak Inta",1991,43,1,["monde"]],["Nusrat Fateh Ali Khan","Shahen-Shah",1989,52,2,["monde"]],
+    ["Rachid Taha","Diwân",1998,54,2,["monde","fr"]],["Khaled","Khaled",1992,46,2,["monde","fr"]],["Ryuichi Sakamoto","async",2017,61,1,["ambient","monde"]],
+    ["Haruomi Hosono","Hosono House",1973,37,1,["monde","folk"]],["Mahmoud Ahmed","Éthiopiques 7",1975,52,2,["monde"]],["Cymande","Cymande",1972,40,2,["monde","soul"]],
+    ["Lee Scratch Perry","Super Ape",1976,36,1,["monde"]],["Augustus Pablo","King Tubbys Meets Rockers Uptown",1976,38,1,["monde"]],["Burning Spear","Marcus Garvey",1975,37,2,["monde"]],
+    // Français
+    ["Serge Gainsbourg","Histoire de Melody Nelson",1971,28,1,["fr"]],["Serge Gainsbourg","L'Homme à tête de chou",1976,33,2,["fr"]],["Jacques Brel","Ces gens-là",1966,34,2,["fr"]],
+    ["Georges Brassens","Les Copains d'abord",1964,33,1,["fr"]],["Barbara","Le Mal de vivre",1965,30,1,["fr"]],["Jacques Dutronc","Jacques Dutronc (Et moi, et moi, et moi)",1966,30,3,["fr"]],
+    ["Françoise Hardy","La Question",1971,30,1,["fr","folk"]],["Michel Polnareff","Polnareff's",1971,34,2,["fr"]],["William Sheller","Lux Aeterna",1972,36,1,["fr"]],
+    ["Noir Désir","Tostaky",1992,52,3,["fr","rock"]],["Téléphone","Dure limite",1982,39,3,["fr","rock"]],["Dominique A","La Fossette",1992,41,1,["fr"]],
+    ["Benjamin Biolay","La Superbe",2009,98,2,["fr"]],["Sébastien Tellier","Sexuality",2008,42,2,["fr","electro"]],["Étienne Daho","Pop Satori",1986,38,2,["fr","pop"]],
+    ["Camille","Le Fil",2005,54,1,["fr"]],["Orelsan","La fête est finie",2017,51,2,["fr","rap"]],["Lomepal","Jeannine",2018,57,2,["fr","rap"]],
+    ["Polo & Pan","Caravelle",2017,44,2,["fr","electro"]],["Feu! Chatterton","Ici le jour (a tout enseveli)",2015,50,2,["fr","rock"]],["Juliette Armanet","Petite Amie",2017,46,2,["fr","pop"]]
+  ].map((a,i)=>({id:i,artist:a[0],title:a[1],year:a[2],min:a[3],energy:a[4],tags:a[5]}));
+
+  const MOODS=[["all","Tout"],["calm","Calme"],["energy","Énergique"],["jazz","Jazz"],["soul","Soul"],["rap","Rap"],["rock","Rock"],["pop","Pop"],["electro","Électro"],["folk","Folk"],["ambient","Classique"],["monde","Monde"],["fr","Français"]];
   // Playlist MFT (Apple Music, 300 morceaux, lue le 26/10/2026) : artistes et albums déjà écoutés
   const MFT=[["Miles Davis","Kind of Blue"],["Miles Davis","In a Silent Way"],["The Beatles","Abbey Road"],["Marvin Gaye","What's Going On"],["Marvin Gaye","Let's Get It On"],["Fela Kuti","Zombie"],["Fela Kuti","Expensive Shit"],["Orchestre Philharmonique de Londres","Mozart: Symphonie No. 40"],["John Coltrane","A Love Supreme"],["John Coltrane","Giant Steps"],["Pink Floyd","The Dark Side of the Moon"],["Stevie Wonder","Songs in the Key of Life"],["Stevie Wonder","Innervisions"],["Bob Marley & The Wailers","Exodus"],["Bob Marley & The Wailers","Catch a Fire"],["Berliner Philharmoniker","Beethoven: 9 Symphonies"],["Berliner Philharmoniker","Tchaïkovski: Casse-noisette"],["Berliner Philharmoniker","Ravel: Boléro"],["Berliner Philharmoniker","Mahler: Symphony No. 5"],["Berliner Philharmoniker","Mahler: Symphony No. 1"],["Berliner Philharmoniker","Ravel: Daphnis et Chloé"],["Thelonious Monk","Monk's Dream"],["Thelonious Monk","Brilliant Corners"],["Led Zeppelin","Led Zeppelin IV"],["Led Zeppelin","Physical Graffiti"],["Aretha Franklin","I Never Loved a Man the Way I Love You"],["Cesária Evora","Miss Perfumado"],["Nikolai Lugansky","Debussy: Suite bergamasque"],["Charles Mingus","Mingus Ah Um"],["David Bowie","The Rise and Fall of Ziggy Stardust and the Spiders from Mars"],["Prince & The Revolution","Purple Rain"],["Prince","Purple Rain"],["Buena Vista Social Club","Buena Vista Social Club"],["Buena Vista Social Club","Lost and Found"],["Herbie Hancock","Head Hunters"],["Fleetwood Mac","Rumours"],["Lauryn Hill","The Miseducation of Lauryn Hill"],["Ravi Shankar","The Sounds of India"],["Ravi Shankar","Chants of India"],["Chet Baker","Chet Baker Sings"],["Radiohead","OK Computer"],["James Brown","Live At The Apollo"],["Ali Farka Touré","In the Heart of the Moon"],["Teodor Currentzis","Stravinsky: Le Sacre du Printemps"],["Esperanza Spalding","Emily's D+Evolution"],["Nirvana","Nevermind"],["Nirvana","In Utero"],["OutKast","Aquemini"],["Manu Dibango","O Boso"],["Manu Dibango","Manu Dibango Anthology"],["Bill Evans","Village Vanguard"],["U2","The Joshua Tree"],["Public Enemy","It Takes a Nation of Millions to Hold Us Back"],["Anouar Brahem","Le pas du chat noir"],["Gidon Kremer","Arvo Pärt: Tabula Rasa"],["Staatsorchester Stuttgart","Arvo Pärt: Tabula Rasa"],["Ornette Coleman","The Shape of Jazz to Come"],["Dire Straits","Brothers In Arms"],["Kanye West","My Beautiful Dark Twisted Fantasy"],["Philip Glass","Glassworks"],["Charlie Parker","Best Of The Complete Savoy & Dial Studio Recordings"],["Oasis","(What's the Story) Morning Glory?"],["Freddie Gibbs","Piñata"],["Daniel Barenboim","Chopin: Nocturnes"],["Duke Ellington and His Orchestra","Ellington at Newport"],["Arctic Monkeys","AM"],["A Tribe Called Quest","The Low End Theory"],["Ella Fitzgerald","Ella and Louis"],["The Rolling Stones","Exile On Main Street"],["The Rolling Stones","Sticky Fingers"],["JAŸ-Z","The Blueprint"],["Curtis Mayfield","Curtis"],["Daft Punk","Homework"],["Alain Bashung","Fantaisie Militaire"],["IAM","L'école du micro d'argent"],["Pierre Boulez","Debussy: La mer"],["Black Sabbath","Paranoid"],["Larry Heard","Alien"],["Léo Ferré","Amour Anarchie"],["Lucio Battisti","Anima latina"],["The Velvet Underground","Loaded"],["Nas","Illmatic"]];
   const MFT_LIB={artists:[...new Set(MFT.map(p=>norm(p[0])))],albums:[...new Set(MFT.map(p=>norm(p[0])+"|"+norm(p[1])))],date:"26/10/2026",source:"playlist MFT"};
   let mood=store.get("mood","all"), mv=0, picks=[], lib=store.get("lib",null)||MFT_LIB;
   const hist=()=>store.get("hist",[]);
   const heard=()=>store.get("heard",{artists:[],albums:[]});
-  const inLibrary=a=>{ const ar=norm(a.artistName), al=ar+"|"+norm(a.collectionName), h=heard();
+  const inLibrary=a=>{ const ar=norm(a.artist), al=ar+"|"+norm(a.title), h=heard();
     return (lib&&(lib.artists.includes(ar)||lib.albums.includes(al)))||h.artists.includes(ar)||h.albums.includes(al); };
-  const seen=a=>hist().some(h=>h.id===a.collectionId);
-  const okAlbum=a=>a.wrapperType==="collection"&&a.collectionType==="Album"&&a.trackCount>=7&&!/single|\bep\b|live|remaster|deluxe|best of|greatest|anthology|compilation|karaoke|tribute|soundtrack|bande originale/i.test(a.collectionName);
+  const matches=a=>mood==="all"||(mood==="calm"&&a.energy===1)||(mood==="energy"&&a.energy===3)||a.tags.includes(mood);
+  function pool(){ const p=CANON.filter(a=>matches(a)&&!inLibrary(a)); return p.length>=3?p:CANON.filter(a=>!inLibrary(a)); }
 
-  async function jget(url){ const r=await fetch(url); if(!r.ok) throw new Error("itunes "+r.status); return r.json(); }
-  async function candidates(r){
-    const terms=TERMS[mood].slice().sort(()=>r()-0.5).slice(0,3);
-    const out=new Map();
-    for(const t of terms){
-      const j=await jget(ITUNES+"search?media=music&entity=album&country=fr&limit=100&term="+encodeURIComponent(t));
-      j.results.forEach(a=>{ if(okAlbum(a)&&!inLibrary(a)&&!seen(a)) out.set(a.collectionId,a); });
-    }
-    return [...out.values()];
-  }
-  async function durations(albums){
-    const ids=albums.map(a=>a.collectionId).join(",");
-    const j=await jget(ITUNES+"lookup?entity=song&country=fr&id="+ids);
-    const sum={}; j.results.forEach(t=>{ if(t.wrapperType==="track") sum[t.collectionId]=(sum[t.collectionId]||0)+(t.trackTimeMillis||0); });
-    albums.forEach(a=>a.min=Math.round((sum[a.collectionId]||0)/60000));
-    return albums.filter(a=>a.min>=25);
-  }
-  async function pickMusic(v){
+  function pickMusic(v){
     mv=v; const target=targetMinutes(), r=rng(seedFor(todayStr()+mood,v));
-    $("msgMusic").textContent="Recherche dans le catalogue…"; $("picks").innerHTML="";
-    try{
-      let pool=(await candidates(r)).sort(()=>r()-0.5);
-      if(pool.length<4) throw new Error("trop peu de disques inconnus pour cette ambiance");
-      const withDur=await durations(pool.slice(0,25));
-      let best=null,bestGap=1e9;
-      outer: for(const tol of [8,14,22]) for(let i=0;i<withDur.length;i++){
-        const a=withDur[i]; if(Math.abs(a.min-target)<=tol){best=[a];break outer}
-        for(let j=i+1;j<withDur.length;j++){ const b=withDur[j],s=a.min+b.min,g=Math.abs(s-target);
-          if(g<=tol){best=[a,b];break outer} if(g<bestGap){bestGap=g;best=[a,b]}
-          if(s<target-tol) for(let k=j+1;k<withDur.length;k++){ const c=withDur[k]; if(Math.abs(s+c.min-target)<=tol){best=[a,b,c];break outer} } }
-      }
-      picks=best||withDur.slice(0,2); renderMusic(); $("msgMusic").textContent="";
-    }catch(e){ $("msgMusic").textContent="Catalogue inaccessible ("+e.message+")."; }
+    const sh=pool().slice().sort(()=>r()-0.5); let best=null,bestGap=1e9;
+    outer: for(const tol of [6,12,20]) for(let i=0;i<sh.length;i++){
+      const a=sh[i]; if(Math.abs(a.min-target)<=tol){best=[a];break outer}
+      for(let j=i+1;j<sh.length;j++){ const b=sh[j],s=a.min+b.min,g=Math.abs(s-target);
+        if(g<=tol){best=[a,b];break outer} if(g<bestGap){bestGap=g;best=[a,b]}
+        if(s<target-tol) for(let k=j+1;k<sh.length;k++){ const c=sh[k]; if(Math.abs(s+c.min-target)<=tol){best=[a,b,c];break outer} } }
+    }
+    picks=best||sh.slice(0,2); renderMusic(); $("msgMusic").textContent="";
   }
+  function hue(a){return seedFor(a.artist+a.title,0)%360}
   function renderMusic(){
     const t=targetMinutes(), total=picks.reduce((x,a)=>x+a.min,0), d=total-t;
-    $("lead").textContent=t+" minutes de marche, "+(picks.length===1?"un disque":picks.length===2?"deux disques":"trois disques")+" que tu n'as jamais écoutés.";
-    $("picks").innerHTML=picks.map(a=>{ const q=encodeURIComponent(a.artistName+" "+a.collectionName); const art=(a.artworkUrl100||"").replace("100x100","300x300");
-      return `<article class="album"><img class="cover" src="${art}" alt="" loading="lazy"><div class="meta">
-      <div class="t">${a.collectionName}</div><div class="a">${a.artistName}</div><div class="d">${(a.releaseDate||"").slice(0,4)} · ${a.min} min · ${a.primaryGenreName||""}</div>
-      <div class="links"><a href="${a.collectionViewUrl}" target="_blank" rel="noopener">Apple Music</a><a href="https://open.spotify.com/search/${q}/albums" target="_blank" rel="noopener">Spotify</a></div></div></article>`; }).join("");
+    $("lead").textContent=t+" minutes de marche, "+(picks.length===1?"un classique":picks.length===2?"deux classiques":"trois classiques")+" que tu n'as jamais écoutés.";
+    $("picks").innerHTML=picks.map(a=>{ const q=encodeURIComponent(a.artist+" "+a.title), h=hue(a);
+      return `<article class="album"><div class="cover" style="background:linear-gradient(140deg,hsl(${h} 18% 34%),hsl(${(h+30)%360} 22% 20%))" aria-hidden="true"></div><div class="meta2">
+      <div class="t">${a.title}</div><div class="a">${a.artist}</div><div class="d">${a.year} · ${a.min} min · ${a.tags.map(x=>MOODS.find(m=>m[0]===x)[1]).join(", ")}</div>
+      <div class="links"><a href="https://music.apple.com/fr/search?term=${q}" target="_blank" rel="noopener">Apple Music</a><a href="https://open.spotify.com/search/${q}/albums" target="_blank" rel="noopener">Spotify</a></div></div></article>`; }).join("");
     $("total").textContent=total+" min ("+(d>=0?"+":"")+d+")";
     $("hist").innerHTML=hist().slice().reverse().slice(0,30).map(x=>`<li><span>${x.artist}, ${x.title}</span><span>${new Date(x.t).toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit"})}</span></li>`).join("")||"<li><span>Aucun pour l'instant</span></li>";
   }
   MOODS.forEach(([k,label])=>{ const b=document.createElement("button"); b.className="chip"; b.type="button"; b.textContent=label; b.dataset.k=k; b.setAttribute("aria-pressed",k===mood);
     b.onclick=()=>{ mood=k; store.set("mood",mood); document.querySelectorAll(".chip").forEach(c=>c.setAttribute("aria-pressed",c.dataset.k===mood)); pickMusic(0); }; $("chips").appendChild(b); });
   $("btnKeep").onclick=()=>{ const h=hist(), hd=heard(), now=Date.now();
-    picks.forEach(a=>{ if(!h.some(x=>x.id===a.collectionId)) h.push({id:a.collectionId,artist:a.artistName,title:a.collectionName,t:now});
-      const ar=norm(a.artistName), al=ar+"|"+norm(a.collectionName); if(!hd.artists.includes(ar)) hd.artists.push(ar); if(!hd.albums.includes(al)) hd.albums.push(al); });
+    picks.forEach(a=>{ if(!h.some(x=>x.id===a.id)) h.push({id:a.id,artist:a.artist,title:a.title,t:now});
+      const ar=norm(a.artist), al=ar+"|"+norm(a.title); if(!hd.artists.includes(ar)) hd.artists.push(ar); if(!hd.albums.includes(al)) hd.albums.push(al); });
     store.set("hist",h.slice(-500)); store.set("heard",hd); libStatus(); renderMusic();
-    $("msgMusic").textContent="Noté : "+picks.map(a=>a.artistName).join(", ")+" ne reviendront plus, aucun album."; };
+    $("msgMusic").textContent="Noté : "+picks.map(a=>a.artist).join(", ")+" ne reviendront plus."; };
   $("btnOther").onclick=()=>pickMusic(mv+1);
 
   /* ---------- Bibliothèque : import de l'export XML (ou CSV artiste;album) ---------- */
